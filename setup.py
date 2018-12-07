@@ -6,6 +6,7 @@ import pip
 import sys
 import codecs
 import pkg_resources
+import traceback
 
 from subprocess import check_call
 from os.path import dirname, abspath, join, isfile, isdir, basename
@@ -59,10 +60,6 @@ setup_requires = _parse_requirements('requirements/setup.txt')
 test_requirements = _parse_requirements('requirements/test.txt')
 
 
-def get_target():
-    return os.environ.get('V8_TARGET', 'native')
-
-
 def local_path(path):
     """ Return path relative to this file
     """
@@ -79,7 +76,7 @@ def is_v8_built():
     """
     if V8_PATH:
         return True
-    return all(isfile(static_filepath) for static_filepath in get_raw_static_lib_path())
+    return all(get_raw_static_lib_path())
 
 
 def is_depot_tools_checkout():
@@ -91,19 +88,12 @@ def is_depot_tools_checkout():
 def libv8_object(object_name):
     """ Return a path for object_name which is OS independent
     """
-    filename = join(V8_LIB_DIRECTORY, "out/{}/".format(get_target()),
-                    object_name)
-    if not isfile(filename):
-        filename = join(V8_LIB_DIRECTORY,
-                        "out/{}/obj.target/tools/gyp/".format(get_target()),
-                        object_name)
+    filenames = [
+        join(V8_LIB_DIRECTORY, 'out.gn/x64.release/obj/{}'.format(object_name)),
+        join(local_path('vendor/v8/out.gn/libv8/obj/{}'.format(object_name)))
+    ]
 
-    if not isfile(filename):
-        filename = join(V8_LIB_DIRECTORY,
-                        "out/{}/".format(get_target()),
-                        object_name)
-
-    return filename
+    return next((f for f in filenames if isfile(f)), None)
 
 
 def get_raw_static_lib_path():
@@ -165,6 +155,8 @@ class MiniRacerBuildExt(build_ext):
                 build_ext.build_extension(self, ext)
 
         except Exception as e:
+            traceback.print_exc()
+
             # Alter message
             err_msg = """py_mini_racer failed to build, ensure you have an up-to-date pip (>= 8.1) to use the wheel instead
             To update pip: 'pip install -U pip'
@@ -200,8 +192,7 @@ class MiniRacerBuildV8(Command):
 
         if not is_v8_built():
             print("building v8")
-            target = os.environ.get('V8_TARGET', 'native')
-            build_v8(target)
+            build_v8()
         else:
             print("v8 is already built")
 
